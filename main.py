@@ -1,8 +1,8 @@
 import logging
+import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from binance.client import Client
-import os
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ALLOWED_USER = os.getenv("ALLOWED_USER")
@@ -14,7 +14,7 @@ binance_client = Client()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.username != ALLOWED_USER:
         return
-    await update.message.reply_text("👋 أهلاً بك في بوت توصيات Ghani!\nاستخدم الأمر /reco لتوليد توصية.\nمثال:\n/reco BTCUSDT 5 2")
+    await update.message.reply_text("👋 مرحبًا بك في بوت توصيات Ghani! \nاكتب /reco BTCUSDT 5 2")
 
 async def reco(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.username != ALLOWED_USER:
@@ -40,13 +40,10 @@ async def reco(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(message)
 
     except Exception as e:
-        await update.message.reply_text(f"❌ حدث خطأ: {e}\nيرجى التأكد من كتابة الأمر بهذا الشكل:\n/reco BTCUSDT 5 2")
+        await update.message.reply_text(f"❌ خطأ: {e}\nاكتب الأمر بهذا الشكل:\n/reco BTCUSDT 5 2")
 
 if __name__ == '__main__':
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("reco", reco))
     app.run_polling()
-  Update main.py
-
-
