@@ -1,57 +1,71 @@
 import logging
 import os
-import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import Application
+
+from binance.client import Client
+from flask import Flask, request
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ALLOWED_USER = os.getenv("ALLOWED_USER")
+ALLOWED_USER = os.getenv("ALLOWED_USER")  # بدون @
+URL = os.getenv("WEBHOOK_URL")  # رابط موقعك من Render
+
+# إعداد Binance
+binance_client = Client()
+
+# إعداد Flask
+app = Flask(__name__)
+
+# إعداد Telegram bot
+application = Application.builder().token(BOT_TOKEN).build()
 
 logging.basicConfig(level=logging.INFO)
 
-COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price"
-
+# أوامر البوت
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.username != ALLOWED_USER:
         return
-    await update.message.reply_text(
-        "👋 أهلاً بك في بوت توصيات Ghani!\nاستخدم الأمر /reco لتوليد توصية.\nمثال:\n/reco bitcoin 5 2"
-    )
+    await update.message.reply_text("👋 أهلاً بك في بوت Ghani لتوصيات التداول!\nاستخدم /reco")
 
 async def reco(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.username != ALLOWED_USER:
         return
-
     try:
-        symbol = context.args[0].lower()
-        tp_percent = float(context.args[1])
-        sl_percent = float(context.args[2])
+        symbol = context.args[0].upper()
+        tp = float(context.args[1])
+        sl = float(context.args[2])
 
-        response = requests.get(f"{COINGECKO_URL}?ids={symbol}&vs_currencies=usd")
-        data = response.json()
+        price = float(binance_client.get_symbol_ticker(symbol=symbol)["price"])
+        tp_price = price * (1 + tp / 100)
+        sl_price = price * (1 - sl / 100)
 
-        if symbol not in data:
-            await update.message.reply_text("❌ العملة غير موجودة أو غير مدعومة من CoinGecko.")
-            return
-
-        price = float(data[symbol]['usd'])
-
-        tp_price = price * (1 + tp_percent / 100)
-        sl_price = price * (1 - sl_percent / 100)
-
-        message = (
-            f"💹 توصية تداول لـ {symbol}:\n"
+        msg = (
+            f"💹 توصية لـ {symbol}:\n"
             f"🔸 السعر الحالي: {price:.2f} USDT\n"
-            f"🎯 الهدف (TP): {tp_price:.2f} USDT (+{tp_percent}%)\n"
-            f"🛑 وقف الخسارة (SL): {sl_price:.2f} USDT (-{sl_percent}%)"
+            f"🎯 الهدف: {tp_price:.2f} USDT (+{tp}%)\n"
+            f"🛑 وقف الخسارة: {sl_price:.2f} USDT (-{sl}%)"
         )
-        await update.message.reply_text(message)
-
+        await update.message.reply_text(msg)
     except Exception as e:
-        await update.message.reply_text(f"❌ خطأ: {e}\nاستخدم الأمر بهذا الشكل:\n/reco bitcoin 5 2")
+        await update.message.reply_text(f"❌ خطأ: {e}\nاكتب الأمر هكذا:\n/reco BTCUSDT 5 3")
 
-if __name__ == '__main__':
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("reco", reco))
-    app.run_polling()
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("reco", reco))
+
+# Flask route to handle Webhook
+@app.route("/", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    application.update_queue.put_nowait(update)
+    return "ok"
+
+# إعداد Webhook عند التشغيل
+@app.before_first_request
+def init():
+    application.bot.delete_webhook()
+    application.bot.set_webhook(url=URL)
+
+# بدء السيرفر
+if __name__ == "__main__":
+    app.run(port=10000)
